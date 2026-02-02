@@ -1,0 +1,31 @@
+# Example config for git-digest.
+# Copy to repos.yaml or ~/.config/git-digest/repos.yaml
+# You can also set options via .env (see .env.example) or CLI flags.
+
+# Directory where repos are cloned (optional; default: ~/.cache/git-digest)
+# cache_dir: ~/.cache/git-digest
+
+# Default number of recent commits per repo (optional)
+# max_commits: 10
+
+# Report title (optional; default: Git updates summary)
+# default_title: My repo digest
+
+# Ollama defaults for --ai-summary (optional; can use .env instead)
+# ollama_url: http://127.0.0.1:11434
+# ollama_model: gemma3n
+# ollama_timeout: 120
+
+repos:
+  # Simple form: URL only
+  - https://github.com/owner/repo.git
+
+  # Full form: URL + options
+  - url: https://github.com/owner/other.git
+    branch: main
+    max_commits: 5
+    include_tags: true
+
+  - url: https://gitlab.com/group/project.git
+    branch: develop
+    max_commits: 20

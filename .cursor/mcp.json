@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "git-digest": {
+      "command": "uv",
+      "args": [
+        "--directory",
+        "${workspaceFolder}",
+        "run",
+        "git-digest-mcp"
+      ]
+    }
+  }
+}
