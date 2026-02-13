@@ -30,7 +30,15 @@ def _raw_context(summaries: list[RepoSummary]) -> str:
                 lines.append(f"    - {c.date_iso}  {c.sha_short}{ref_part}  {c.author}: {c.subject}")
         elif s.since_last_run:
             lines.append("  No new commits since last run.")
-        if s.tags:
+        if s.tags_since_last_run:
+            if s.tags:
+                lines.append("  New tags/releases since last run:")
+                for t in s.tags[:5]:
+                    msg_part = f"  — {t.message}" if t.message else ""
+                    lines.append(f"    - {t.date_iso}  {t.name} ({t.sha_short}){msg_part}")
+            else:
+                lines.append("  No new tags since last run.")
+        elif s.tags:
             lines.append("  Recent tags/releases:")
             for t in s.tags[:5]:
                 msg_part = f"  — {t.message}" if t.message else ""
@@ -70,7 +78,15 @@ def format_report(summaries: list[RepoSummary], title: str | None = None) -> str
                 lines.append(f"    - {c.date_iso}  {c.sha_short}{ref_part}  {c.author}: {c.subject}")
         elif s.since_last_run:
             lines.append("  No new commits since last run.")
-        if s.tags:
+        if s.tags_since_last_run:
+            if s.tags:
+                lines.append("  New tags/releases since last run:")
+                for t in s.tags[:5]:
+                    msg_part = f"  — {t.message}" if t.message else ""
+                    lines.append(f"    - {t.date_iso}  {t.name} ({t.sha_short}){msg_part}")
+            else:
+                lines.append("  No new tags since last run.")
+        elif s.tags:
             lines.append("  Recent tags/releases:")
             for t in s.tags[:5]:
                 msg_part = f"  — {t.message}" if t.message else ""

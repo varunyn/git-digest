@@ -9,7 +9,7 @@ Fetch latest git updates (recent commits and releases/tags) from repositories yo
 - **Releases/tags**: Optional list of recent tags with date and message.
 - **Cron-friendly**: Prints a single report to stdout (or to a file); you can pipe to `mail` or append to a log.
 - **Caching**: Repos are cloned once into a cache directory; subsequent runs only `git fetch` and show the latest.
-- **Changes-only mode** (`--changes-only`): When running daily (or on a schedule), only show **new** commits since last run. Repos with no new activity show "No new commits since last run." instead of repeating the same recent commits. State is stored in the cache directory.
+- **Changes-only mode** (`--changes-only`): When running daily (or on a schedule), only show **new** commits and **new** tags/releases since last run. Repos with no new activity show "No new commits since last run." and "No new tags since last run." instead of repeating the same recent lists. State (last-seen commit and tag names per repo) is stored in the cache directory.
 - **AI summary** (`--ai-summary`): Use [Ollama](https://ollama.com/) on your Mac (or any host) to generate a short natural-language digest instead of a raw commit list. If Ollama is unreachable or the model is missing, the tool falls back to the plain report.
 - **MCP server** ([FastMCP](https://github.com/jlowin/fastmcp)): Expose **get_git_updates** and **list_tracked_repos** as MCP tools so any MCP-capable AI (Cursor, Claude Desktop, etc.) can fetch your git update summary on demand.
 
@@ -103,7 +103,7 @@ uv run git-digest --output ~/git-summary.txt
 # Custom report title and verbose logging
 uv run git-digest --title "Daily repo digest" --verbose
 
-# Only show commits new since last run (for daily cron: no repeated "recent" lists)
+# Only show commits and tags new since last run (for daily cron: no repeated "recent" lists)
 uv run git-digest --changes-only
 
 # AI digest via Ollama (requires Ollama running locally, e.g. ollama serve)
@@ -165,7 +165,7 @@ Run the script on a schedule and either append to a log or email the report.
 ```cron
 0 8 * * * cd /path/to/git-digest && uv run git-digest --changes-only --output ~/git-digest.txt
 ```
-Repos with no new activity show "No new commits since last run." instead of the same recent-commits list every time.
+Repos with no new activity show "No new commits since last run." and "No new tags since last run." instead of repeating the same recent commits and tags every time.
 
 **Example: run every 6 hours and email the report** (requires `mail` or similar)
 
@@ -201,15 +201,14 @@ Generated: 2025-02-02 14:30
     - 2025-01-15 12:00  v1.2.0 (a1b2c3d)  — Release 1.2.0
 ```
 
-**With `--changes-only`** (e.g. second run, no new commits):
+**With `--changes-only`** (e.g. second run, no new commits or tags):
 
 ```
 ## owner/repo
   URL: https://github.com/owner/repo.git
   Branch: HEAD
   No new commits since last run.
-  Recent tags/releases:
-    - 2025-01-15 12:00  v1.2.0 (a1b2c3d)  — Release 1.2.0
+  No new tags since last run.
 ```
 
 ## License

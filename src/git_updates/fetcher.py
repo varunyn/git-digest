@@ -49,7 +49,9 @@ class RepoSummary:
     tags: list[TagInfo] = field(default_factory=list)
     error: str | None = None
     since_last_run: bool = False
+    tags_since_last_run: bool = False
     head_sha: str | None = None
+    recent_tag_names: list[str] = field(default_factory=list)
 
     @property
     def display_name(self) -> str:
@@ -112,14 +114,27 @@ def _commits_to_infos(commits: list[Commit], max_n: int) -> list[CommitInfo]:
     return result
 
 
-def _tags_to_infos(repo: Repo, max_tags: int = 10) -> list[TagInfo]:
-    """Get recent tags with commit date and message."""
+def _tags_to_infos(
+    repo: Repo,
+    max_tags: int = 10,
+    last_seen_tag_names: set[str] | None = None,
+) -> tuple[list[TagInfo], list[str]]:
+    """
+    Get recent tags with commit date and message.
+
+    If last_seen_tag_names is set, returned tags are only those not in that set (new since last run).
+    Always returns (tag_infos, recent_tag_names) where recent_tag_names are the top max_tags names
+    by date (for state persistence).
+    """
     result: list[TagInfo] = []
+    recent_names: list[str] = []
     try:
         tags = sorted(repo.tags, key=lambda t: t.commit.committed_datetime or 0, reverse=True)
     except Exception:
-        return result
-    for tag in tags[:max_tags]:
+        return result, recent_names
+    for tag in tags:
+        if len(recent_names) >= max_tags and len(result) >= max_tags:
+            break
         try:
             commit = tag.commit
             date_str = (
@@ -130,17 +145,20 @@ def _tags_to_infos(repo: Repo, max_tags: int = 10) -> list[TagInfo]:
             msg = ""
             if tag.tag is not None and tag.tag.message:
                 msg = (tag.tag.message or "").split("\n")[0].strip()[:60]
-            result.append(
-                TagInfo(
-                    name=tag.name,
-                    sha_short=commit.hexsha[:7],
-                    date_iso=date_str,
-                    message=msg,
-                )
+            info = TagInfo(
+                name=tag.name,
+                sha_short=commit.hexsha[:7],
+                date_iso=date_str,
+                message=msg,
             )
+            if len(recent_names) < max_tags:
+                recent_names.append(tag.name)
+            if last_seen_tag_names is None or tag.name not in last_seen_tag_names:
+                if len(result) < max_tags:
+                    result.append(info)
         except Exception:
             continue
-    return result
+    return result, recent_names
 
 
 def _commits_since_sha(
@@ -166,12 +184,14 @@ def fetch_repo_summary(
     config: RepoConfig,
     cache_dir: Path,
     last_seen_sha: str | None = None,
+    last_seen_tag_names: set[str] | None = None,
 ) -> RepoSummary:
     """
     Fetch latest commits and optional tags for one repo.
 
     Clones to cache_dir if needed (shallow), then fetches and builds summary.
     If last_seen_sha is set, only commits newer than that are included (for --changes-only).
+    If last_seen_tag_names is set (and include_tags), only tags not in that set are included.
     """
     name = _repo_name_from_url(config.url)
     summary = RepoSummary(url=config.url, name=name, branch=config.branch)
@@ -211,7 +231,12 @@ def fetch_repo_summary(
                 summary.head_sha = commits[0].hexsha
             summary.commits = _commits_to_infos(commits, config.max_commits)
         if config.include_tags:
-            summary.tags = _tags_to_infos(repo)
+            tag_filter = last_seen_tag_names if last_seen_sha else None
+            summary.tags, summary.recent_tag_names = _tags_to_infos(
+                repo, max_tags=10, last_seen_tag_names=tag_filter
+            )
+            if tag_filter is not None:
+                summary.tags_since_last_run = True
     except GitCommandError as e:
         summary.error = str(e).split("\n")[0]
     except Exception as e:

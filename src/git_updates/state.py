@@ -1,15 +1,25 @@
-"""Persist last-seen commit per repo for --changes-only runs."""
+"""Persist last-seen commit and tag names per repo for --changes-only runs."""
 
 from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import Any
 
 STATE_FILENAME = "state.json"
 
+# Value is either legacy str (last_seen_commit_sha) or dict with commit_sha + tag_names
+StateValue = str | dict[str, Any]
 
-def load_state(cache_dir: Path) -> dict[str, str]:
-    """Load state from cache_dir/state.json. Returns repo_url -> last_seen_commit_sha."""
+
+def load_state(cache_dir: Path) -> dict[str, StateValue]:
+    """
+    Load state from cache_dir/state.json.
+
+    Returns repo_url -> value where value is either:
+    - str: legacy last_seen_commit_sha
+    - dict: {"commit_sha": str, "tag_names": list[str]} (tag_names optional)
+    """
     path = cache_dir / STATE_FILENAME
     if not path.exists():
         return {}
@@ -20,8 +30,32 @@ def load_state(cache_dir: Path) -> dict[str, str]:
         return {}
 
 
-def save_state(cache_dir: Path, state: dict[str, str]) -> None:
-    """Write state to cache_dir/state.json."""
+def get_last_seen_sha(state: dict[str, StateValue], repo_url: str) -> str | None:
+    """Return last-seen commit SHA for repo, or None. Handles legacy str and new dict format."""
+    val = state.get(repo_url)
+    if val is None:
+        return None
+    if isinstance(val, str):
+        return val
+    return val.get("commit_sha")
+
+
+def get_last_seen_tag_names(state: dict[str, StateValue], repo_url: str) -> set[str]:
+    """Return set of last-seen tag names for repo. Empty if not stored (e.g. legacy state)."""
+    val = state.get(repo_url)
+    if not isinstance(val, dict):
+        return set()
+    names = val.get("tag_names")
+    if not isinstance(names, list):
+        return set()
+    return set(n for n in names if isinstance(n, str))
+
+
+def save_state(
+    cache_dir: Path,
+    state: dict[str, StateValue],
+) -> None:
+    """Write state to cache_dir/state.json. Values may be str (legacy) or dict with commit_sha and tag_names."""
     path = cache_dir / STATE_FILENAME
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(state, indent=2), encoding="utf-8")
