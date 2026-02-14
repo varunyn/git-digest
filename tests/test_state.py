@@ -6,6 +6,7 @@ import pytest
 
 from git_updates.state import (
     STATE_FILENAME,
+    get_last_seen_newest_tag_date,
     get_last_seen_sha,
     get_last_seen_tag_names,
     load_state,
@@ -65,6 +66,36 @@ def test_get_last_seen_tag_names_dict(tmp_path: Path) -> None:
         "https://github.com/a/b": {"commit_sha": "abc", "tag_names": ["v1.0", "v0.9"]},
     }
     assert get_last_seen_tag_names(state, "https://github.com/a/b") == {"v1.0", "v0.9"}
+
+
+def test_get_last_seen_newest_tag_date_none(tmp_path: Path) -> None:
+    """get_last_seen_newest_tag_date returns None for missing or legacy state."""
+    state = {"https://github.com/a/b": "abc123"}
+    assert get_last_seen_newest_tag_date(state, "https://github.com/a/b") is None
+    assert get_last_seen_newest_tag_date(state, "https://other.com/x") is None
+
+
+def test_get_last_seen_newest_tag_date_dict(tmp_path: Path) -> None:
+    """get_last_seen_newest_tag_date returns value from dict state."""
+    state = {
+        "https://github.com/a/b": {
+            "commit_sha": "abc",
+            "newest_tag_date": "2025-02-01 12:00:00",
+        },
+    }
+    assert get_last_seen_newest_tag_date(state, "https://github.com/a/b") == "2025-02-01 12:00:00"
+
+
+def test_save_and_load_state_with_newest_tag_date(tmp_path: Path) -> None:
+    """State with commit_sha and newest_tag_date round-trips correctly."""
+    state = {
+        "https://github.com/a/b": {
+            "commit_sha": "abc123",
+            "newest_tag_date": "2025-02-10 08:00:00",
+        },
+    }
+    save_state(tmp_path, state)
+    assert load_state(tmp_path) == state
 
 
 def test_load_state_invalid_json_returns_empty(tmp_path: Path) -> None:

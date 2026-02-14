@@ -9,8 +9,8 @@ from fastmcp import FastMCP
 from git_updates.config import Config, DEFAULT_CONFIG_PATHS, load_dotenv_for_app
 from git_updates.fetcher import fetch_repo_summary
 from git_updates.state import (
+    get_last_seen_newest_tag_date,
     get_last_seen_sha,
-    get_last_seen_tag_names,
     load_state,
     save_state,
 )
@@ -80,22 +80,22 @@ def get_git_updates(
     summaries = []
     for repo_config in config.repos:
         last_sha = get_last_seen_sha(state, repo_config.url) if changes_only else None
-        last_tag_names = (
-            get_last_seen_tag_names(state, repo_config.url) if changes_only else None
+        last_newest_tag_date = (
+            get_last_seen_newest_tag_date(state, repo_config.url) if changes_only else None
         )
         summary = fetch_repo_summary(
             repo_config,
             config.cache_dir,
             last_seen_sha=last_sha,
-            last_seen_tag_names=last_tag_names or None,
+            last_seen_newest_tag_date=last_newest_tag_date,
         )
         summaries.append(summary)
         if changes_only and not summary.error:
             entry = {}
             if summary.head_sha:
                 entry["commit_sha"] = summary.head_sha
-            if summary.recent_tag_names:
-                entry["tag_names"] = summary.recent_tag_names
+            if summary.newest_tag_date:
+                entry["newest_tag_date"] = summary.newest_tag_date
             if entry:
                 state[repo_config.url] = entry
 

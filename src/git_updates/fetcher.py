@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
+from datetime import timezone
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -51,7 +52,7 @@ class RepoSummary:
     since_last_run: bool = False
     tags_since_last_run: bool = False
     head_sha: str | None = None
-    recent_tag_names: list[str] = field(default_factory=list)
+    newest_tag_date: str | None = None
 
     @property
     def display_name(self) -> str:
@@ -114,51 +115,97 @@ def _commits_to_infos(commits: list[Commit], max_n: int) -> list[CommitInfo]:
     return result
 
 
+def _tag_commit_datetime_utc(tag) -> str | None:
+    """Return tag's commit datetime as UTC ISO string for storage/comparison, or None."""
+    from datetime import datetime
+
+    dt = getattr(tag.commit, "committed_datetime", None)
+    if dt is None:
+        return None
+    if getattr(dt, "tzinfo", None) is not None:
+        dt = dt.astimezone(timezone.utc).replace(tzinfo=None)
+    return dt.strftime("%Y-%m-%d %H:%M:%S")
+
+
+def _parse_utc_iso(s: str):
+    """Parse UTC naive ISO datetime string for comparison."""
+    from datetime import datetime
+
+    return datetime.strptime(s.strip(), "%Y-%m-%d %H:%M:%S")
+
+
 def _tags_to_infos(
     repo: Repo,
     max_tags: int = 10,
-    last_seen_tag_names: set[str] | None = None,
-) -> tuple[list[TagInfo], list[str]]:
+    last_seen_newest_tag_date: str | None = None,
+) -> tuple[list[TagInfo], str | None]:
     """
     Get recent tags with commit date and message.
 
-    If last_seen_tag_names is set, returned tags are only those not in that set (new since last run).
-    Always returns (tag_infos, recent_tag_names) where recent_tag_names are the top max_tags names
-    by date (for state persistence).
+    If last_seen_newest_tag_date is set (ISO UTC string), only tags with commit date
+    strictly after that are returned (true "new since last run").
+    Returns (tag_infos, newest_tag_date_iso) for state persistence.
     """
+    from datetime import datetime
+
     result: list[TagInfo] = []
-    recent_names: list[str] = []
+    newest_date_iso: str | None = None
+    cutoff = None
+    if last_seen_newest_tag_date:
+        try:
+            cutoff = _parse_utc_iso(last_seen_newest_tag_date)
+        except (ValueError, TypeError):
+            cutoff = None
     try:
-        tags = sorted(repo.tags, key=lambda t: t.commit.committed_datetime or 0, reverse=True)
+        tags = sorted(repo.tags, key=lambda t: t.commit.committed_datetime or datetime.min, reverse=True)
     except Exception:
-        return result, recent_names
+        return result, newest_date_iso
     for tag in tags:
-        if len(recent_names) >= max_tags and len(result) >= max_tags:
+        if len(result) >= max_tags and newest_date_iso is not None:
             break
         try:
             commit = tag.commit
+            dt = getattr(commit, "committed_datetime", None)
+            if dt is None:
+                continue
+            tag_date_utc_str = _tag_commit_datetime_utc(tag)
+            if tag_date_utc_str is None:
+                continue
+            if cutoff is not None:
+                try:
+                    tag_dt = _parse_utc_iso(tag_date_utc_str)
+                    if tag_dt <= cutoff:
+                        if newest_date_iso is None:
+                            newest_date_iso = tag_date_utc_str
+                        continue
+                except (ValueError, TypeError):
+                    pass
             date_str = (
-                commit.committed_datetime.strftime("%Y-%m-%d %H:%M")
-                if commit.committed_datetime
+                dt.strftime("%Y-%m-%d %H:%M")
+                if dt
                 else ""
             )
             msg = ""
             if tag.tag is not None and tag.tag.message:
                 msg = (tag.tag.message or "").split("\n")[0].strip()[:60]
-            info = TagInfo(
-                name=tag.name,
-                sha_short=commit.hexsha[:7],
-                date_iso=date_str,
-                message=msg,
+            result.append(
+                TagInfo(
+                    name=tag.name,
+                    sha_short=commit.hexsha[:7],
+                    date_iso=date_str,
+                    message=msg,
+                )
             )
-            if len(recent_names) < max_tags:
-                recent_names.append(tag.name)
-            if last_seen_tag_names is None or tag.name not in last_seen_tag_names:
-                if len(result) < max_tags:
-                    result.append(info)
+            if newest_date_iso is None:
+                newest_date_iso = tag_date_utc_str
         except Exception:
             continue
-    return result, recent_names
+    if tags:
+        try:
+            newest_date_iso = _tag_commit_datetime_utc(tags[0])
+        except Exception:
+            pass
+    return result, newest_date_iso
 
 
 def _commits_since_sha(
@@ -184,14 +231,15 @@ def fetch_repo_summary(
     config: RepoConfig,
     cache_dir: Path,
     last_seen_sha: str | None = None,
-    last_seen_tag_names: set[str] | None = None,
+    last_seen_newest_tag_date: str | None = None,
 ) -> RepoSummary:
     """
     Fetch latest commits and optional tags for one repo.
 
     Clones to cache_dir if needed (shallow), then fetches and builds summary.
     If last_seen_sha is set, only commits newer than that are included (for --changes-only).
-    If last_seen_tag_names is set (and include_tags), only tags not in that set are included.
+    If last_seen_newest_tag_date is set (and include_tags), only tags with commit date
+    after that are included (true new releases since last run).
     """
     name = _repo_name_from_url(config.url)
     summary = RepoSummary(url=config.url, name=name, branch=config.branch)
@@ -231,11 +279,11 @@ def fetch_repo_summary(
                 summary.head_sha = commits[0].hexsha
             summary.commits = _commits_to_infos(commits, config.max_commits)
         if config.include_tags:
-            tag_filter = last_seen_tag_names if last_seen_sha else None
-            summary.tags, summary.recent_tag_names = _tags_to_infos(
-                repo, max_tags=10, last_seen_tag_names=tag_filter
+            tag_cutoff = last_seen_newest_tag_date if last_seen_sha else None
+            summary.tags, summary.newest_tag_date = _tags_to_infos(
+                repo, max_tags=10, last_seen_newest_tag_date=tag_cutoff
             )
-            if tag_filter is not None:
+            if tag_cutoff is not None:
                 summary.tags_since_last_run = True
     except GitCommandError as e:
         summary.error = str(e).split("\n")[0]
