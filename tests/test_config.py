@@ -6,11 +6,12 @@ from pathlib import Path
 import pytest
 
 from git_updates.config import (
-    Config,
-    ENV_OLLAMA_MODEL,
     ENV_DEFAULT_TITLE,
+    ENV_OLLAMA_MODEL,
+    Config,
     RepoConfig,
 )
+from git_updates.initializer import STARTER_CONFIG, initialize_config
 
 
 def test_repo_config_from_dict_simple() -> None:
@@ -24,12 +25,14 @@ def test_repo_config_from_dict_simple() -> None:
 
 def test_repo_config_from_dict_full() -> None:
     """Full dict overrides defaults."""
-    c = RepoConfig.from_dict({
-        "url": "https://gitlab.com/a/b.git",
-        "branch": "develop",
-        "max_commits": 5,
-        "include_tags": False,
-    })
+    c = RepoConfig.from_dict(
+        {
+            "url": "https://gitlab.com/a/b.git",
+            "branch": "develop",
+            "max_commits": 5,
+            "include_tags": False,
+        }
+    )
     assert c.url == "https://gitlab.com/a/b.git"
     assert c.branch == "develop"
     assert c.max_commits == 5
@@ -129,3 +132,47 @@ def test_config_from_repo_list(tmp_path: Path) -> None:
     assert len(config.repos) == 2
     assert config.repos[0].url == "https://github.com/foo/bar.git"
     assert config.repos[1].url == "https://gitlab.com/x/y.git"
+
+
+@pytest.mark.parametrize(
+    ("yaml", "error"),
+    [
+        ("repos: not-a-list", "repos must be a YAML list"),
+        ("repos:\n  - url: https://github.com/a/b\n    max_commits: 0", "max_commits"),
+        ("repos:\n  - url: https://github.com/a/b\n    include_tags: sometimes", "include_tags"),
+        ("repos:\n  - url: not a URL", "Repository URL"),
+        ("repos:\n  - url: https://github.com/a/b\nunknown_key: true", "Unknown configuration"),
+    ],
+)
+def test_config_rejects_invalid_values(tmp_path: Path, yaml: str, error: str) -> None:
+    """Invalid config values fail with a useful error before git is invoked."""
+    path = tmp_path / "repos.yaml"
+    path.write_text(yaml)
+    with pytest.raises(ValueError, match=error):
+        Config.from_yaml(path)
+
+
+def test_config_rejects_duplicate_normalized_repository_urls(tmp_path: Path) -> None:
+    """A remote cannot be listed twice with superficial URL differences."""
+    path = tmp_path / "repos.yaml"
+    path.write_text("repos:\n  - https://github.com/a/b.git\n  - https://github.com/a/b/\n")
+    with pytest.raises(ValueError, match="Duplicate repository"):
+        Config.from_yaml(path)
+
+
+def test_initialize_config_creates_starter_without_overwriting(tmp_path: Path) -> None:
+    """The reusable initializer writes a safe starter config exactly once."""
+    path = tmp_path / "nested" / "repos.yaml"
+    result = initialize_config(path)
+    assert result == path.resolve()
+    assert path.read_text() == STARTER_CONFIG
+    with pytest.raises(FileExistsError, match="Refusing to overwrite"):
+        initialize_config(path)
+
+
+def test_initialize_config_can_explicitly_overwrite(tmp_path: Path) -> None:
+    """Overwrite requires an explicit caller choice."""
+    path = tmp_path / "repos.yaml"
+    path.write_text("old config")
+    initialize_config(path, overwrite=True)
+    assert path.read_text() == STARTER_CONFIG

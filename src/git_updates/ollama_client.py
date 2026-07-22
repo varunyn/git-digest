@@ -17,7 +17,7 @@ DEFAULT_TIMEOUT = 120
 
 def list_models(base_url: str = DEFAULT_BASE_URL, timeout: int = 10) -> list[str]:
     """
-    Return list of installed Ollama model names (e.g. ['gemma3n:latest', 'nomic-embed-text:latest']).
+    Return installed Ollama model names, such as ``gemma3n:latest``.
 
     Returns empty list on any error (e.g. Ollama not running).
     """
@@ -27,7 +27,9 @@ def list_models(base_url: str = DEFAULT_BASE_URL, timeout: int = 10) -> list[str
         resp.raise_for_status()
         data = resp.json()
         models = data.get("models") or []
-        return [m.get("name", m.get("model", "")) for m in models if m.get("name") or m.get("model")]
+        return [
+            m.get("name", m.get("model", "")) for m in models if m.get("name") or m.get("model")
+        ]
     except Exception:
         return []
 

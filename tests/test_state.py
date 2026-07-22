@@ -2,13 +2,11 @@
 
 from pathlib import Path
 
-import pytest
-
 from git_updates.state import (
     STATE_FILENAME,
     get_last_seen_newest_tag_date,
     get_last_seen_sha,
-    get_last_seen_tag_names,
+    get_last_seen_tag_ids,
     load_state,
     save_state,
 )
@@ -27,19 +25,6 @@ def test_save_and_load_state_legacy(tmp_path: Path) -> None:
     assert load_state(tmp_path) == state
 
 
-def test_save_and_load_state_with_tags(tmp_path: Path) -> None:
-    """State with commit_sha and tag_names round-trips correctly."""
-    state = {
-        "https://github.com/a/b": {
-            "commit_sha": "abc123",
-            "tag_names": ["v1.0", "v0.9"],
-        },
-    }
-    save_state(tmp_path, state)
-    loaded = load_state(tmp_path)
-    assert loaded == state
-
-
 def test_get_last_seen_sha_legacy(tmp_path: Path) -> None:
     """get_last_seen_sha returns value for legacy string state."""
     state = {"https://github.com/a/b": "abc123"}
@@ -49,23 +34,17 @@ def test_get_last_seen_sha_legacy(tmp_path: Path) -> None:
 
 def test_get_last_seen_sha_dict(tmp_path: Path) -> None:
     """get_last_seen_sha returns commit_sha for dict state."""
-    state = {"https://github.com/a/b": {"commit_sha": "def456", "tag_names": ["v1"]}}
+    state = {"https://github.com/a/b": {"commit_sha": "def456", "tag_ids": ["v1:def456"]}}
     assert get_last_seen_sha(state, "https://github.com/a/b") == "def456"
 
 
-def test_get_last_seen_tag_names_empty_or_legacy(tmp_path: Path) -> None:
-    """get_last_seen_tag_names returns empty set for missing or legacy state."""
-    state = {"https://github.com/a/b": "abc123"}
-    assert get_last_seen_tag_names(state, "https://github.com/a/b") == set()
-    assert get_last_seen_tag_names(state, "https://other.com/x") == set()
-
-
-def test_get_last_seen_tag_names_dict(tmp_path: Path) -> None:
-    """get_last_seen_tag_names returns tag list from dict state."""
-    state = {
-        "https://github.com/a/b": {"commit_sha": "abc", "tag_names": ["v1.0", "v0.9"]},
-    }
-    assert get_last_seen_tag_names(state, "https://github.com/a/b") == {"v1.0", "v0.9"}
+def test_get_last_seen_tag_ids_distinguishes_legacy_from_empty() -> None:
+    """Identity state preserves the difference between unknown and no tags."""
+    assert get_last_seen_tag_ids({}, "https://github.com/a/b") is None
+    state = {"https://github.com/a/b": {"tag_ids": []}}
+    assert get_last_seen_tag_ids(state, "https://github.com/a/b") == set()
+    state["https://github.com/a/b"] = {"tag_ids": ["v1:abc", 1]}
+    assert get_last_seen_tag_ids(state, "https://github.com/a/b") == {"v1:abc"}
 
 
 def test_get_last_seen_newest_tag_date_none(tmp_path: Path) -> None:
