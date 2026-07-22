@@ -47,7 +47,15 @@ def _load_config(config_path: str | None) -> Config:
     )
 
 
-@mcp.tool()
+@mcp.tool(
+    annotations={
+        # Fetching repositories updates the local clone cache; changes_only also
+        # persists the last-seen state used by later runs.
+        "readOnlyHint": False,
+        "idempotentHint": False,
+        "openWorldHint": True,
+    }
+)
 def get_git_updates(
     config_path: str | None = None,
     changes_only: bool = False,
