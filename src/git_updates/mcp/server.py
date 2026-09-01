@@ -5,9 +5,10 @@ from __future__ import annotations
 import argparse
 import json
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal, TypedDict
 
 from fastmcp import FastMCP
+from mcp.types import ToolAnnotations
 
 from git_updates.config import DEFAULT_CONFIG_PATHS, Config, load_dotenv_for_app
 from git_updates.fetcher import fetch_repo_summary
@@ -31,6 +32,87 @@ mcp = FastMCP(
 )
 
 
+class CommitData(TypedDict):
+    """Machine-readable commit data returned by the updates tool."""
+
+    sha: str
+    author: str
+    date: str
+    subject: str
+    refs: str
+    type: str | None
+
+
+class TagData(TypedDict):
+    """Machine-readable release tag data returned by the updates tool."""
+
+    name: str
+    sha: str
+    date: str
+    message: str
+
+
+class RepositoryUpdateData(TypedDict):
+    """Machine-readable update data for one repository."""
+
+    name: str
+    url: str
+    branch: str
+    status: Literal["ok", "error"]
+    error: str | None
+    since_last_run: bool
+    tags_since_last_run: bool
+    head_sha: str | None
+    newest_tag_date: str | None
+    signals: list[str]
+    commits: list[CommitData]
+    tags: list[TagData]
+
+
+class UpdateCounts(TypedDict):
+    """Aggregate counts included in a machine-readable update report."""
+
+    repositories: int
+    changed_repositories: int
+    commits: int
+    tags: int
+    errors: int
+
+
+class GitUpdatesData(TypedDict, total=False):
+    """Machine-readable update report or report-generation error.
+
+    Fields are optional because successful reports and errors intentionally have
+    different stable top-level shapes. Keeping this as one object schema avoids
+    FastMCP wrapping union results under a ``result`` key.
+    """
+
+    schema_version: Literal[1]
+    title: str | None
+    generated_at: str
+    summary: UpdateCounts
+    repositories: list[RepositoryUpdateData]
+    status: Literal["error"]
+    error: str
+
+
+class TrackedRepositoryData(TypedDict):
+    """Machine-readable configuration for one tracked repository."""
+
+    url: str
+    branch: str
+    max_commits: int
+    include_tags: bool
+
+
+class TrackedRepositoriesData(TypedDict, total=False):
+    """Machine-readable tracked repository response or configuration error."""
+
+    status: Literal["ok", "error"]
+    repositories: list[TrackedRepositoryData]
+    error: str
+
+
 def _load_config(config_path: str | None) -> Config:
     """Load a config, apply env overrides, and fail if no config exists."""
     load_dotenv_for_app()
@@ -48,13 +130,14 @@ def _load_config(config_path: str | None) -> Config:
 
 
 @mcp.tool(
-    annotations={
+    annotations=ToolAnnotations(
         # Fetching repositories updates the local clone cache; changes_only also
         # persists the last-seen state used by later runs.
-        "readOnlyHint": False,
-        "idempotentHint": False,
-        "openWorldHint": True,
-    }
+        readOnlyHint=False,
+        destructiveHint=False,
+        idempotentHint=False,
+        openWorldHint=True,
+    )
 )
 def get_git_updates(
     config_path: str | None = None,
@@ -152,11 +235,11 @@ def get_git_updates(
 
 
 @mcp.tool(
-    annotations={
-        "readOnlyHint": True,
-        "idempotentHint": True,
-        "openWorldHint": False,
-    }
+    annotations=ToolAnnotations(
+        readOnlyHint=True,
+        idempotentHint=True,
+        openWorldHint=False,
+    )
 )
 def list_tracked_repos(config_path: str | None = None) -> str:
     """
@@ -180,12 +263,19 @@ def list_tracked_repos(config_path: str | None = None) -> str:
     return "\n".join(r.url for r in config.repos)
 
 
-@mcp.tool()
+@mcp.tool(
+    annotations=ToolAnnotations(
+        readOnlyHint=False,
+        destructiveHint=False,
+        idempotentHint=False,
+        openWorldHint=True,
+    )
+)
 def get_git_updates_data(
     config_path: str | None = None,
     changes_only: bool = False,
-) -> dict[str, Any]:
-    """Fetch updates and return FastMCP v3 structured data.
+) -> GitUpdatesData:
+    """Fetch updates and return FastMCP v4 structured data.
 
     This is the machine-readable companion to ``get_git_updates``. It exposes
     the stable JSON report as a typed tool result rather than requiring clients
@@ -203,13 +293,13 @@ def get_git_updates_data(
 
 
 @mcp.tool(
-    annotations={
-        "readOnlyHint": True,
-        "idempotentHint": True,
-        "openWorldHint": False,
-    }
+    annotations=ToolAnnotations(
+        readOnlyHint=True,
+        idempotentHint=True,
+        openWorldHint=False,
+    )
 )
-def get_tracked_repositories(config_path: str | None = None) -> dict[str, Any]:
+def get_tracked_repositories(config_path: str | None = None) -> TrackedRepositoriesData:
     """Return tracked repositories as structured data for programmatic clients."""
     try:
         config = _load_config(config_path)
@@ -258,8 +348,8 @@ def configuration_status_resource() -> str:
 
 
 def run() -> None:
-    """Run over stdio (default) or FastMCP v3 Streamable HTTP."""
-    parser = argparse.ArgumentParser(description="Run the git-digest FastMCP v3 server.")
+    """Run over stdio (default) or FastMCP v4 Streamable HTTP."""
+    parser = argparse.ArgumentParser(description="Run the git-digest FastMCP v4 server.")
     parser.add_argument(
         "--transport",
         choices=("stdio", "http"),

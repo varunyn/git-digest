@@ -12,7 +12,7 @@ Fetch latest git updates (recent commits and releases/tags) from repositories yo
 - **Changes-only mode** (`--changes-only`): When running daily (or on a schedule), only show **new** commits and **new** tags/releases since last run. Repos with no new activity show "No new commits since last run." and "No new tags since last run." instead of repeating the same recent lists. State (last-seen commit and tag names per repo) is stored in the cache directory.
 - **AI summary** (`--ai-summary`): Use [Ollama](https://ollama.com/) on your Mac (or any host) to generate a short natural-language digest instead of a raw commit list. If Ollama is unreachable or the model is missing, the tool falls back to the plain report.
 - **Automation-ready output**: Render text, Markdown, or stable versioned JSON; optionally POST the final report to a webhook.
-- **MCP server** ([FastMCP v3](https://gofastmcp.com)): Expose **get_git_updates** and **list_tracked_repos** as MCP tools so any MCP-capable AI (Cursor, Claude Desktop, etc.) can fetch your git update summary on demand, locally over stdio or remotely over Streamable HTTP.
+- **MCP server** ([FastMCP v4](https://gofastmcp.com)): Expose **get_git_updates** and **list_tracked_repos** as MCP tools so any MCP-capable AI (Cursor, Claude Desktop, etc.) can fetch your git update summary on demand, locally over stdio or remotely over Streamable HTTP.
 
 ## Install
 
@@ -190,7 +190,7 @@ Then ask your AI: *"What are my git updates?"* or *"Summarize my tracked repos."
 
 ### Streamable HTTP server
 
-FastMCP v3's `http` transport serves the Streamable HTTP MCP protocol. It is useful for a long-running local service, Docker, or a shared internal deployment. Start it with the FastMCP CLI:
+FastMCP v4's `http` transport serves the Streamable HTTP MCP protocol. It is useful for a long-running local service, Docker, or a shared internal deployment. Start it with the FastMCP CLI:
 
 ```bash
 cd /path/to/git-digest
