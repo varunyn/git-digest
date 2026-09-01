@@ -5,10 +5,11 @@ from __future__ import annotations
 import argparse
 import json
 from pathlib import Path
-from typing import Any, Literal, TypedDict
+from typing import Any, Literal
 
 from fastmcp import FastMCP
 from mcp.types import ToolAnnotations
+from typing_extensions import TypedDict
 
 from git_updates.config import DEFAULT_CONFIG_PATHS, Config, load_dotenv_for_app
 from git_updates.fetcher import fetch_repo_summary
