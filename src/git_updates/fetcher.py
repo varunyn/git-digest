@@ -7,7 +7,7 @@ import re
 from dataclasses import dataclass, field
 from datetime import timezone
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from git import Repo
 from git.exc import BadName, GitCommandError
@@ -109,6 +109,9 @@ def _commits_to_infos(commits: list[Commit], max_n: int) -> list[CommitInfo]:
         ref_list = getattr(c, "references", None)
         if ref_list:
             refs = " ".join(getattr(r, "name", str(r)) for r in ref_list)
+        raw_message = c.message or ""
+        if isinstance(raw_message, bytes):
+            raw_message = raw_message.decode("utf-8", errors="replace")
         result.append(
             CommitInfo(
                 sha_short=c.hexsha[:7],
@@ -116,7 +119,7 @@ def _commits_to_infos(commits: list[Commit], max_n: int) -> list[CommitInfo]:
                 date_iso=(
                     c.committed_datetime.strftime("%Y-%m-%d %H:%M") if c.committed_datetime else ""
                 ),
-                subject=(c.message or "").split("\n")[0].strip()[:80],
+                subject=raw_message.split("\n")[0].strip()[:80],
                 refs=refs,
             )
         )
@@ -125,10 +128,12 @@ def _commits_to_infos(commits: list[Commit], max_n: int) -> list[CommitInfo]:
 
 def _tag_commit_datetime_utc(tag) -> str | None:
     """Return tag's commit datetime as UTC ISO string for storage/comparison, or None."""
+    from datetime import datetime
+
     dt = getattr(tag.commit, "committed_datetime", None)
-    if dt is None:
+    if not isinstance(dt, datetime):
         return None
-    if getattr(dt, "tzinfo", None) is not None:
+    if dt.tzinfo is not None:
         dt = dt.astimezone(timezone.utc).replace(tzinfo=None)
     return dt.strftime("%Y-%m-%d %H:%M:%S")
 
@@ -247,17 +252,17 @@ def _remote_target(repo: Repo, config: RepoConfig):
         return repo.head.commit
 
 
-def _history_contains(repo: Repo, target: object, commit_sha: str) -> bool:
+def _history_contains(repo: Repo, target: Any, commit_sha: str) -> bool:
     """Return whether the target's fetched history contains ``commit_sha``."""
     try:
-        return repo.is_ancestor(commit_sha, target)
+        # GitPython's stubs type is_ancestor(Commit, Commit) but it accepts
+        # SHA strings at runtime (passed through to `git merge-base`).
+        return repo.is_ancestor(commit_sha, target)  # type: ignore[arg-type]
     except (BadName, GitCommandError):
         return False
 
 
-def _deepen_until_contains(
-    repo: Repo, config: RepoConfig, target: object, commit_sha: str
-) -> object:
+def _deepen_until_contains(repo: Repo, config: RepoConfig, target: Any, commit_sha: str) -> Any:
     """Deepen a shallow clone in bounded steps until its previous state is visible."""
     is_shallow = repo.git.rev_parse("--is-shallow-repository").strip() == "true"
     if _history_contains(repo, target, commit_sha) or not is_shallow:
@@ -282,7 +287,7 @@ def _deepen_until_contains(
 
 def _commits_since_sha(
     repo: Repo,
-    target: object,
+    target: Any,
     last_seen_sha: str,
     max_count: int,
 ) -> tuple[list[Commit], bool]:

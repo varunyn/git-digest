@@ -5,7 +5,7 @@ from __future__ import annotations
 import argparse
 import json
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any, Literal, cast
 
 from fastmcp import FastMCP
 from mcp.types import ToolAnnotations
@@ -13,7 +13,7 @@ from typing_extensions import TypedDict
 
 from git_updates.config import DEFAULT_CONFIG_PATHS, Config, load_dotenv_for_app
 from git_updates.service import collect_updates
-from git_updates.summary import format_report, format_report_with_ai
+from git_updates.summary import OutputFormat, format_report, format_report_with_ai
 
 mcp = FastMCP(
     "Git Updates",
@@ -126,10 +126,10 @@ def _load_config(config_path: str | None) -> Config:
     annotations=ToolAnnotations(
         # Fetching repositories updates the local clone cache; changes_only also
         # persists the last-seen state used by later runs.
-        readOnlyHint=False,
-        destructiveHint=False,
-        idempotentHint=False,
-        openWorldHint=True,
+        read_only_hint=False,
+        destructive_hint=False,
+        idempotent_hint=False,
+        open_world_hint=True,
     )
 )
 def get_git_updates(
@@ -188,16 +188,18 @@ def get_git_updates(
             ollama_timeout=config.ollama_timeout,
         )
     else:
-        report = format_report(summaries, title=report_title, output_format=output_format)
+        report = format_report(
+            summaries, title=report_title, output_format=cast("OutputFormat", output_format)
+        )
 
     return report
 
 
 @mcp.tool(
     annotations=ToolAnnotations(
-        readOnlyHint=True,
-        idempotentHint=True,
-        openWorldHint=False,
+        read_only_hint=True,
+        idempotent_hint=True,
+        open_world_hint=False,
     )
 )
 def list_tracked_repos(config_path: str | None = None) -> str:
@@ -224,10 +226,10 @@ def list_tracked_repos(config_path: str | None = None) -> str:
 
 @mcp.tool(
     annotations=ToolAnnotations(
-        readOnlyHint=False,
-        destructiveHint=False,
-        idempotentHint=False,
-        openWorldHint=True,
+        read_only_hint=False,
+        destructive_hint=False,
+        idempotent_hint=False,
+        open_world_hint=True,
     )
 )
 def get_git_updates_data(
@@ -246,16 +248,17 @@ def get_git_updates_data(
         output_format="json",
     )
     try:
-        return json.loads(report)
+        data: GitUpdatesData = json.loads(report)
+        return data
     except json.JSONDecodeError:
         return {"schema_version": 1, "status": "error", "error": report}
 
 
 @mcp.tool(
     annotations=ToolAnnotations(
-        readOnlyHint=True,
-        idempotentHint=True,
-        openWorldHint=False,
+        read_only_hint=True,
+        idempotent_hint=True,
+        open_world_hint=False,
     )
 )
 def get_tracked_repositories(config_path: str | None = None) -> TrackedRepositoriesData:
@@ -280,9 +283,9 @@ def get_tracked_repositories(config_path: str | None = None) -> TrackedRepositor
 
 @mcp.tool(
     annotations=ToolAnnotations(
-        readOnlyHint=True,
-        idempotentHint=True,
-        openWorldHint=False,
+        read_only_hint=True,
+        idempotent_hint=True,
+        open_world_hint=False,
     )
 )
 def validate_config(config_path: str | None = None) -> dict:

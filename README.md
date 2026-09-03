@@ -79,6 +79,23 @@ uv run git-digest --init
 Configuration is validated before fetching: repository URLs must be non-empty, commit
 limits and timeouts must be positive, and the same repository cannot appear twice.
 
+### Validate and doctor
+
+Check a config file without fetching any repository:
+
+```bash
+uv run git-digest --validate --config repos.yaml
+```
+
+Run read-only environment checks (config, cache dir, git, state, Ollama):
+
+```bash
+uv run git-digest --doctor
+```
+
+Note: a top-level `max_commits` in `repos.yaml` now applies as the default commit
+limit for all repos that do not set their own `max_commits`.
+
 ### Environment / .env (optional)
 
 Copy `.env.example` to `.env` in the project directory or to `~/.config/git-digest/.env`. These override options in `repos.yaml` (CLI flags still override env):

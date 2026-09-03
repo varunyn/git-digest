@@ -31,6 +31,7 @@ def validate_config_file(config_path: Path | None) -> tuple[bool, str]:
     from git_updates.config import DEFAULT_CONFIG_PATHS, Config
 
     try:
+        config: Config | None
         if config_path is not None:
             config = Config.from_yaml(config_path).with_env_overrides()
         else:

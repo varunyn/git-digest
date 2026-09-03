@@ -178,8 +178,8 @@ def main() -> int:
         return 2
 
     if args.validate:
-        ok, message = validate_config_file(args.config)
-        if ok:
+        valid, message = validate_config_file(args.config)
+        if valid:
             print(message)
             return 0
         print(message, file=sys.stderr)
