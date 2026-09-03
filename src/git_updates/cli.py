@@ -9,16 +9,8 @@ from pathlib import Path
 
 from git_updates.config import DEFAULT_CONFIG_PATHS, Config, load_dotenv_for_app
 from git_updates.delivery import deliver_webhook
-from git_updates.fetcher import fetch_repo_summary
 from git_updates.initializer import initialize_config
-from git_updates.state import (
-    get_last_seen_newest_tag_date,
-    get_last_seen_sha,
-    get_last_seen_tag_ids,
-    load_state,
-    save_state,
-    state_lock,
-)
+from git_updates.service import collect_updates
 from git_updates.summary import format_report, format_report_with_ai
 
 logger = logging.getLogger("git_updates")
@@ -219,45 +211,7 @@ def main() -> int:
         args.ollama_timeout if args.ollama_timeout is not None else config.ollama_timeout
     )
 
-    def collect_updates(state: dict) -> list:
-        summaries: list = []
-        for repo_config in config.repos:
-            if args.verbose:
-                logger.info("Fetching %s ...", repo_config.url)
-            last_sha = get_last_seen_sha(state, repo_config.url) if args.changes_only else None
-            last_tag_ids = (
-                get_last_seen_tag_ids(state, repo_config.url) if args.changes_only else None
-            )
-            last_newest_tag_date = (
-                get_last_seen_newest_tag_date(state, repo_config.url) if args.changes_only else None
-            )
-            summary = fetch_repo_summary(
-                repo_config,
-                config.cache_dir,
-                last_seen_sha=last_sha,
-                last_seen_tag_ids=last_tag_ids,
-                last_seen_newest_tag_date=last_newest_tag_date,
-            )
-            summaries.append(summary)
-            if args.changes_only and not summary.error and not summary.commits_truncated:
-                entry: dict = {}
-                if summary.head_sha:
-                    entry["commit_sha"] = summary.head_sha
-                if summary.newest_tag_date:
-                    entry["newest_tag_date"] = summary.newest_tag_date
-                if repo_config.include_tags:
-                    entry["tag_ids"] = summary.tag_ids
-                if entry:
-                    state[repo_config.url] = entry
-        return summaries
-
-    if args.changes_only:
-        with state_lock(config.cache_dir):
-            state = load_state(config.cache_dir)
-            summaries = collect_updates(state)
-            save_state(config.cache_dir, state)
-    else:
-        summaries = collect_updates({})
+    summaries = collect_updates(config, changes_only=args.changes_only, verbose=args.verbose)
 
     if args.ai_summary:
         if args.format != "text":
