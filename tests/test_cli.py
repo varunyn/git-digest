@@ -52,3 +52,44 @@ def test_doctor_ok(tmp_path: Path, monkeypatch, capsys) -> None:
     assert main() in (0, 1)  # 1 allowed if git/ollama missing in CI
     out = capsys.readouterr().out
     assert "PASS" in out or "FAIL" in out or "WARN" in out  # exits without traceback
+
+
+def test_doctor_missing_config_reports_failure_and_continues(
+    tmp_path: Path, monkeypatch, capsys
+) -> None:
+    cache_dir = tmp_path / "cache"
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "git-digest",
+            "--doctor",
+            "--config",
+            str(tmp_path / "missing.yaml"),
+            "--cache-dir",
+            str(cache_dir),
+        ],
+    )
+
+    assert main() == 1
+    out = capsys.readouterr().out
+    assert "FAIL: config -" in out
+    assert "cache_dir" in out
+
+
+def test_doctor_invalid_config_reports_failure_and_continues(
+    tmp_path: Path, monkeypatch, capsys
+) -> None:
+    config_path = tmp_path / "invalid.yaml"
+    config_path.write_text("repos:\n  - {}\n", encoding="utf-8")
+    cache_dir = tmp_path / "cache"
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        ["git-digest", "--doctor", "--config", str(config_path), "--cache-dir", str(cache_dir)],
+    )
+
+    assert main() == 1
+    out = capsys.readouterr().out
+    assert "FAIL: config -" in out
+    assert "cache_dir" in out

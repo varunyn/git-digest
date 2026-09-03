@@ -185,15 +185,22 @@ def main() -> int:
         print(message, file=sys.stderr)
         return 2
 
+    config_error: str | None = None
     if args.config:
         try:
             config = Config.from_yaml(args.config)
         except FileNotFoundError as e:
             logger.error("%s", e)
-            return 1
+            if not args.doctor:
+                return 1
+            config = Config()
+            config_error = f"invalid: {e}"
         except Exception as e:
             logger.error("Invalid config: %s", e)
-            return 1
+            if not args.doctor:
+                return 1
+            config = Config()
+            config_error = f"invalid: {e}"
     elif args.repos:
         config = Config.from_repo_list(args.repos)
         if not config.repos:
@@ -209,13 +216,22 @@ def main() -> int:
                     break
                 except Exception as e:
                     logger.error("Failed to load %s: %s", p, e)
-                    return 1
+                    if not args.doctor:
+                        return 1
+                    config = Config()
+                    config_error = f"invalid: {e}"
+                    loaded = True
+                    break
         if not loaded:
-            logger.error(
-                "No config found. Use --config FILE or --repos FILE, or create one of: %s",
-                ", ".join(str(p) for p in DEFAULT_CONFIG_PATHS),
+            message = (
+                "No config found. Use --config FILE or --repos FILE, or create one of: "
+                f"{', '.join(str(p) for p in DEFAULT_CONFIG_PATHS)}"
             )
-            return 1
+            logger.error(message)
+            if not args.doctor:
+                return 1
+            config = Config()
+            config_error = f"invalid: {message}"
 
     config = config.with_env_overrides()
     if args.cache_dir:
@@ -228,7 +244,7 @@ def main() -> int:
         if args.ollama_model is not None:
             config.ollama_model = args.ollama_model
         failed = False
-        for name, ok, detail in doctor_report(config):
+        for name, ok, detail in doctor_report(config, config_error=config_error):
             label = "PASS" if ok is True else ("WARN" if ok is None else "FAIL")
             if ok is False:
                 failed = True

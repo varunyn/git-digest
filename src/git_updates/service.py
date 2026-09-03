@@ -51,7 +51,9 @@ def validate_config_file(config_path: Path | None) -> tuple[bool, str]:
     return (True, f"OK: {count} {noun}")
 
 
-def doctor_report(config: Config) -> list[tuple[str, bool | None, str]]:
+def doctor_report(
+    config: Config, *, config_error: str | None = None
+) -> list[tuple[str, bool | None, str]]:
     """Run read-only environment checks (no remote fetch).
 
     Returns (check, ok, detail) per check where ok None means WARN.
@@ -59,14 +61,17 @@ def doctor_report(config: Config) -> list[tuple[str, bool | None, str]]:
     """
     results: list[tuple[str, bool | None, str]] = []
 
-    try:
-        config.validate()
-    except Exception as e:
-        results.append(("config", False, f"invalid: {e}"))
+    if config_error is not None:
+        results.append(("config", False, config_error))
     else:
-        count = len(config.repos)
-        noun = "repo" if count == 1 else "repos"
-        results.append(("config", True, f"{count} {noun} configured"))
+        try:
+            config.validate()
+        except Exception as e:
+            results.append(("config", False, f"invalid: {e}"))
+        else:
+            count = len(config.repos)
+            noun = "repo" if count == 1 else "repos"
+            results.append(("config", True, f"{count} {noun} configured"))
 
     try:
         config.cache_dir.mkdir(parents=True, exist_ok=True)
