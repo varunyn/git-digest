@@ -10,7 +10,7 @@ from pathlib import Path
 from git_updates.config import DEFAULT_CONFIG_PATHS, Config, load_dotenv_for_app
 from git_updates.delivery import deliver_webhook
 from git_updates.initializer import initialize_config
-from git_updates.service import collect_updates, validate_config_file
+from git_updates.service import collect_updates, doctor_report, validate_config_file
 from git_updates.summary import format_report, format_report_with_ai
 
 logger = logging.getLogger("git_updates")
@@ -42,6 +42,11 @@ def _parse_args() -> argparse.Namespace:
         "--validate",
         action="store_true",
         help="Validate config and exit.",
+    )
+    parser.add_argument(
+        "--doctor",
+        action="store_true",
+        help="Run read-only environment checks (config, cache, git, state, Ollama) and exit.",
     )
     parser.add_argument(
         "--force",
@@ -216,6 +221,19 @@ def main() -> int:
     if args.cache_dir:
         config.cache_dir = args.cache_dir.expanduser().resolve()
     config.cache_dir.mkdir(parents=True, exist_ok=True)
+
+    if args.doctor:
+        if args.ollama_url is not None:
+            config.ollama_url = args.ollama_url
+        if args.ollama_model is not None:
+            config.ollama_model = args.ollama_model
+        failed = False
+        for name, ok, detail in doctor_report(config):
+            label = "PASS" if ok is True else ("WARN" if ok is None else "FAIL")
+            if ok is False:
+                failed = True
+            print(f"{label}: {name} - {detail}")
+        return 1 if failed else 0
 
     title = args.title if args.title is not None else config.default_title
     ollama_model = args.ollama_model if args.ollama_model is not None else config.ollama_model

@@ -39,3 +39,16 @@ def test_validate_ok_and_bad(tmp_path: Path, monkeypatch, capsys) -> None:
     bad.write_text("repos:\n  - {}\n", encoding="utf-8")
     monkeypatch.setattr(sys, "argv", ["git-digest", "--validate", "--config", str(bad)])
     assert main() == 2
+
+
+def test_doctor_ok(tmp_path: Path, monkeypatch, capsys) -> None:
+    good = tmp_path / "good.yaml"
+    good.write_text("repos:\n  - https://github.com/o/r.git\n", encoding="utf-8")
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        ["git-digest", "--doctor", "--config", str(good), "--cache-dir", str(tmp_path / "cache")],
+    )
+    assert main() in (0, 1)  # 1 allowed if git/ollama missing in CI
+    out = capsys.readouterr().out
+    assert "PASS" in out or "FAIL" in out or "WARN" in out  # exits without traceback
