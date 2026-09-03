@@ -176,3 +176,25 @@ def test_initialize_config_can_explicitly_overwrite(tmp_path: Path) -> None:
     path.write_text("old config")
     initialize_config(path, overwrite=True)
     assert path.read_text() == STARTER_CONFIG
+
+
+def test_top_level_max_commits_applies_to_plain_urls(tmp_path):
+    p = tmp_path / "repos.yaml"
+    p.write_text("max_commits: 5\nrepos:\n  - https://github.com/o/r.git\n", encoding="utf-8")
+    from git_updates.config import Config
+
+    cfg = Config.from_yaml(p)
+    assert cfg.max_commits_default == 5
+    assert cfg.repos[0].max_commits == 5
+
+
+def test_explicit_per_repo_wins(tmp_path):
+    p = tmp_path / "repos.yaml"
+    p.write_text(
+        "max_commits: 5\nrepos:\n  - url: https://github.com/o/r.git\n    max_commits: 3\n",
+        encoding="utf-8",
+    )
+    from git_updates.config import Config
+
+    cfg = Config.from_yaml(p)
+    assert cfg.repos[0].max_commits == 3

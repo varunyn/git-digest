@@ -109,7 +109,7 @@ class RepoConfig:
     include_tags: bool = True
 
     @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> RepoConfig:
+    def from_dict(cls, data: dict[str, Any], default_max_commits: int = 10) -> RepoConfig:
         """Build RepoConfig from a dict (e.g. from YAML)."""
         if not isinstance(data, dict):
             raise ValueError("Repository config must be a mapping")
@@ -127,7 +127,9 @@ class RepoConfig:
         return cls(
             url=url,
             branch=branch.strip(),
-            max_commits=_as_positive_int(data.get("max_commits", 10), "max_commits"),
+            max_commits=_as_positive_int(
+                data.get("max_commits", default_max_commits), "max_commits"
+            ),
             include_tags=_as_bool(data.get("include_tags", True), "include_tags"),
         )
 
@@ -160,12 +162,13 @@ class Config:
         raw_repos = raw.get("repos", [])
         if not isinstance(raw_repos, list):
             raise ValueError("repos must be a YAML list")
+        max_default = _as_positive_int(raw.get("max_commits", 10), "max_commits")
         repos: list[RepoConfig] = []
         for item in raw_repos:
             if isinstance(item, str):
-                repos.append(RepoConfig.from_dict({"url": item}))
+                repos.append(RepoConfig.from_dict({"url": item}, default_max_commits=max_default))
             else:
-                repos.append(RepoConfig.from_dict(item))
+                repos.append(RepoConfig.from_dict(item, default_max_commits=max_default))
         cache = raw.get("cache_dir")
         if cache is not None and (not isinstance(cache, str) or not cache.strip()):
             raise ValueError("cache_dir must be a non-empty path")
@@ -176,7 +179,7 @@ class Config:
         config = cls(
             repos=repos,
             cache_dir=cache_path,
-            max_commits_default=_as_positive_int(raw.get("max_commits", 10), "max_commits"),
+            max_commits_default=max_default,
             default_title=str(raw.get("default_title", "Git updates summary")),
             ollama_model=str(raw.get("ollama_model", "gemma3n")),
             ollama_url=ollama_url.strip(),
