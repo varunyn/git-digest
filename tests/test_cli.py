@@ -23,3 +23,19 @@ def test_init_refuses_existing_config(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setattr(sys, "argv", ["git-digest", "--init", str(config_path)])
 
     assert main() == 2
+
+
+def test_validate_ok_and_bad(tmp_path: Path, monkeypatch, capsys) -> None:
+    import sys
+
+    from git_updates.cli import main
+
+    good = tmp_path / "good.yaml"
+    good.write_text("repos:\n  - https://github.com/o/r.git\n", encoding="utf-8")
+    monkeypatch.setattr(sys, "argv", ["git-digest", "--validate", "--config", str(good)])
+    assert main() == 0
+    assert "OK" in capsys.readouterr().out
+    bad = tmp_path / "bad.yaml"
+    bad.write_text("repos:\n  - {}\n", encoding="utf-8")
+    monkeypatch.setattr(sys, "argv", ["git-digest", "--validate", "--config", str(bad)])
+    assert main() == 2

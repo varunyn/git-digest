@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from pathlib import Path
 
 from git_updates.config import Config
 from git_updates.fetcher import RepoSummary, fetch_repo_summary
@@ -17,10 +18,39 @@ from git_updates.state import (
 
 logger = logging.getLogger("git_updates.service")
 
+
+def validate_config_file(config_path: Path | None) -> tuple[bool, str]:
+    """Validate a config file without fetching any repository.
+
+    Returns (True, "OK: N repos") on success, else (False, "Error: ...").
+    """
+    from git_updates.config import DEFAULT_CONFIG_PATHS, Config
+
+    try:
+        if config_path is not None:
+            config = Config.from_yaml(config_path).with_env_overrides()
+        else:
+            config = None
+            for p in DEFAULT_CONFIG_PATHS:
+                if p.exists():
+                    config = Config.from_yaml(p).with_env_overrides()
+                    break
+            if config is None:
+                paths = ", ".join(str(p) for p in DEFAULT_CONFIG_PATHS)
+                return (False, f"Error: no config found. Create one of: {paths}")
+        config.validate()
+    except Exception as e:
+        return (False, f"Error: {e}")
+    count = len(config.repos)
+    noun = "repo" if count == 1 else "repos"
+    return (True, f"OK: {count} {noun}")
+
+
 def collect_updates(
     config: Config, *, changes_only: bool, verbose: bool = False
 ) -> list[RepoSummary]:
     """Fetch all repos; when changes_only, wrap in state_lock load/save transaction."""
+
     def _collect(state: dict) -> list[RepoSummary]:
         summaries: list[RepoSummary] = []
         for repo_config in config.repos:

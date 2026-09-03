@@ -10,7 +10,7 @@ from pathlib import Path
 from git_updates.config import DEFAULT_CONFIG_PATHS, Config, load_dotenv_for_app
 from git_updates.delivery import deliver_webhook
 from git_updates.initializer import initialize_config
-from git_updates.service import collect_updates
+from git_updates.service import collect_updates, validate_config_file
 from git_updates.summary import format_report, format_report_with_ai
 
 logger = logging.getLogger("git_updates")
@@ -37,6 +37,11 @@ def _parse_args() -> argparse.Namespace:
         const=Path("repos.yaml"),
         metavar="FILE",
         help="Create a starter config (default: ./repos.yaml) and exit.",
+    )
+    parser.add_argument(
+        "--validate",
+        action="store_true",
+        help="Validate config and exit.",
     )
     parser.add_argument(
         "--force",
@@ -165,6 +170,14 @@ def main() -> int:
         return 2
     if args.webhook_timeout < 1:
         logger.error("--webhook-timeout must be a positive integer.")
+        return 2
+
+    if args.validate:
+        ok, message = validate_config_file(args.config)
+        if ok:
+            print(message)
+            return 0
+        print(message, file=sys.stderr)
         return 2
 
     if args.config:

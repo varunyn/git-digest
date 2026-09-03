@@ -278,6 +278,30 @@ def get_tracked_repositories(config_path: str | None = None) -> TrackedRepositor
     }
 
 
+@mcp.tool(
+    annotations=ToolAnnotations(
+        readOnlyHint=True,
+        idempotentHint=True,
+        openWorldHint=False,
+    )
+)
+def validate_config(config_path: str | None = None) -> dict:
+    """Validate configuration without fetching any repository.
+
+    Args:
+        config_path: Optional path to repos.yaml. If omitted, uses default locations.
+
+    Returns:
+        {"status": "ok", "repository_count": N} or {"status": "error", "error": ...}.
+    """
+    try:
+        config = _load_config(config_path)
+        config.validate()
+        return {"status": "ok", "repository_count": len(config.repos)}
+    except Exception as e:
+        return {"status": "error", "error": str(e)}
+
+
 @mcp.resource(
     "git-digest://tracked-repositories",
     name="tracked_repositories",
