@@ -67,9 +67,13 @@ def _signals(summary: RepoSummary) -> str:
     return "; ".join(parts)
 
 
-def _raw_context(summaries: list[RepoSummary]) -> str:
+def _raw_context(summaries: list[RepoSummary], *, skip_unchanged: bool = False) -> str:
     """Build raw context string for AI (no title/date)."""
     lines: list[str] = []
+    if skip_unchanged:
+        summaries = [s for s in summaries if s.has_changes]
+        if not summaries:
+            return "No new commits or tags since last run."
     for s in summaries:
         lines.append(f"## {s.display_name} ({s.url})")
         lines.append(f"  Branch: {s.branch}")
@@ -154,13 +158,27 @@ def _report_data(
     }
 
 
-def format_json_report(summaries: list[RepoSummary], title: str | None = None) -> str:
+def format_json_report(
+    summaries: list[RepoSummary],
+    title: str | None = None,
+    *,
+    skip_unchanged: bool = False,
+) -> str:
     """Render a stable, machine-readable report suitable for automation."""
+    if skip_unchanged:
+        summaries = [s for s in summaries if s.has_changes]
     return json.dumps(_report_data(summaries, title, _generated_at()), indent=2, sort_keys=True)
 
 
-def format_markdown_report(summaries: list[RepoSummary], title: str | None = None) -> str:
+def format_markdown_report(
+    summaries: list[RepoSummary],
+    title: str | None = None,
+    *,
+    skip_unchanged: bool = False,
+) -> str:
     """Render a scannable Markdown report suitable for chat and issue trackers."""
+    if skip_unchanged:
+        summaries = [s for s in summaries if s.has_changes]
     counts = _change_counts(summaries)
     lines = [f"# {title or 'Git updates summary'}", "", f"Generated: {_generated_at()}", ""]
     lines.append(
@@ -169,6 +187,9 @@ def format_markdown_report(summaries: list[RepoSummary], title: str | None = Non
         f"{counts['changed_repositories']} changed repositories; "
         f"{counts['tags']} release tags; {counts['errors']} errors."
     )
+    if not summaries:
+        lines.extend(["", "No new commits or tags since last run."])
+        return "\n".join(lines) + "\n"
     for summary in summaries:
         lines.extend(["", f"## {summary.display_name}", "", f"`{summary.branch}` · {summary.url}"])
         if summary.error:
@@ -199,12 +220,19 @@ def format_markdown_report(summaries: list[RepoSummary], title: str | None = Non
     return "\n".join(lines) + "\n"
 
 
-def _format_text_report(summaries: list[RepoSummary], title: str | None = None) -> str:
+def _format_text_report(
+    summaries: list[RepoSummary],
+    title: str | None = None,
+    *,
+    skip_unchanged: bool = False,
+) -> str:
     """
     Format a list of repo summaries as a plain-text report.
 
     Suitable for cron output (stdout or email).
     """
+    if skip_unchanged:
+        summaries = [s for s in summaries if s.has_changes]
     lines: list[str] = []
     if title:
         lines.append(title)
@@ -218,6 +246,10 @@ def _format_text_report(summaries: list[RepoSummary], title: str | None = None) 
         f"{counts['changed_repositories']} changed repos, {counts['errors']} errors"
     )
     lines.append("")
+    if not summaries:
+        lines.append("No new commits or tags since last run.")
+        lines.append("")
+        return "\n".join(lines)
 
     for s in summaries:
         lines.append(f"## {s.display_name}")
@@ -263,14 +295,15 @@ def format_report(
     title: str | None = None,
     *,
     output_format: OutputFormat = "text",
+    skip_unchanged: bool = False,
 ) -> str:
     """Render a report in text, Markdown, or stable JSON format."""
     if output_format == "text":
-        return _format_text_report(summaries, title)
+        return _format_text_report(summaries, title, skip_unchanged=skip_unchanged)
     if output_format == "markdown":
-        return format_markdown_report(summaries, title)
+        return format_markdown_report(summaries, title, skip_unchanged=skip_unchanged)
     if output_format == "json":
-        return format_json_report(summaries, title)
+        return format_json_report(summaries, title, skip_unchanged=skip_unchanged)
     raise ValueError(f"Unsupported output format: {output_format}")
 
 
@@ -281,6 +314,7 @@ def format_report_with_ai(
     ollama_base_url: str = "http://127.0.0.1:11434",
     ollama_model: str = "gemma3n",
     ollama_timeout: int = 120,
+    skip_unchanged: bool = False,
 ) -> str:
     """
     Build raw context from summaries, send to Ollama for a short digest, return formatted report.
@@ -290,9 +324,22 @@ def format_report_with_ai(
     from git_updates.ollama_client import generate
 
     now = datetime.now().strftime("%Y-%m-%d %H:%M")
-    context = _raw_context(summaries)
+    if skip_unchanged:
+        summaries = [s for s in summaries if s.has_changes]
+        if not summaries:
+            lines: list[str] = []
+            if title:
+                lines.append(title)
+                lines.append("=" * min(60, len(title)))
+                lines.append("")
+            lines.append(f"Generated: {now}")
+            lines.append("")
+            lines.append("No new commits or tags since last run.")
+            lines.append("")
+            return "\n".join(lines)
+    context = _raw_context(summaries, skip_unchanged=skip_unchanged)
     if not context.strip():
-        return format_report(summaries, title=title)
+        return format_report(summaries, title=title, skip_unchanged=skip_unchanged)
 
     prompt = f"Summarize these git updates into a short digest.\n\n{context}"
     try:
@@ -316,10 +363,10 @@ def format_report_with_ai(
                     "Use --ollama-model <name>."
                 )
         logger.warning("Ollama summarization failed (%s).%s Using plain report.", e, hint)
-        return format_report(summaries, title=title)
+        return format_report(summaries, title=title, skip_unchanged=skip_unchanged)
 
     if not ai_text:
-        return format_report(summaries, title=title)
+        return format_report(summaries, title=title, skip_unchanged=skip_unchanged)
 
     lines: list[str] = []
     if title:

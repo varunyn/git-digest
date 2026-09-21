@@ -63,6 +63,11 @@ class RepoSummary:
         """Human-readable repo name (e.g. owner/repo from URL)."""
         return self.name or self.url
 
+    @property
+    def has_changes(self) -> bool:
+        """True when this repo has new commits, tags, or an error worth reporting."""
+        return bool(self.commits or self.tags or self.error)
+
 
 def _repo_name_from_url(url: str) -> str:
     """Derive a short name from repo URL (e.g. owner/repo)."""

@@ -120,6 +120,15 @@ def _parse_args() -> argparse.Namespace:
         ),
     )
     parser.add_argument(
+        "--skip-unchanged",
+        action="store_true",
+        help=(
+            "Omit repos with no new commits, tags, or errors. "
+            "Use with --changes-only for daily Telegram/cron so the message "
+            "shows only what changed since yesterday."
+        ),
+    )
+    parser.add_argument(
         "--ai-summary",
         action="store_true",
         help="Use Ollama (local) to generate a short AI digest instead of raw commit list.",
@@ -270,9 +279,12 @@ def main() -> int:
             ollama_base_url=ollama_url,
             ollama_model=ollama_model,
             ollama_timeout=ollama_timeout,
+            skip_unchanged=args.skip_unchanged,
         )
     else:
-        report = format_report(summaries, title=title, output_format=args.format)
+        report = format_report(
+            summaries, title=title, output_format=args.format, skip_unchanged=args.skip_unchanged
+        )
 
     if args.output:
         args.output.write_text(report, encoding="utf-8")

@@ -139,6 +139,7 @@ def get_git_updates(
     ollama_model: str | None = None,
     title: str | None = None,
     output_format: str = "text",
+    skip_unchanged: bool = False,
 ) -> str:
     """
     Fetch latest git updates from configured repos and return a summary report.
@@ -158,6 +159,7 @@ def get_git_updates(
         ollama_model: Ollama model name when use_ai_summary is True.
         title: Report title (default: from config or GIT_DIGEST_DEFAULT_TITLE).
         output_format: One of text, markdown, or json. AI summaries support text only.
+        skip_unchanged: If True, omit repos with no new commits, tags, or errors.
 
     Returns:
         The full report as a string (markdown-friendly text).
@@ -186,10 +188,14 @@ def get_git_updates(
             ollama_base_url=config.ollama_url,
             ollama_model=model,
             ollama_timeout=config.ollama_timeout,
+            skip_unchanged=skip_unchanged,
         )
     else:
         report = format_report(
-            summaries, title=report_title, output_format=cast("OutputFormat", output_format)
+            summaries,
+            title=report_title,
+            output_format=cast("OutputFormat", output_format),
+            skip_unchanged=skip_unchanged,
         )
 
     return report
@@ -235,6 +241,7 @@ def list_tracked_repos(config_path: str | None = None) -> str:
 def get_git_updates_data(
     config_path: str | None = None,
     changes_only: bool = False,
+    skip_unchanged: bool = False,
 ) -> GitUpdatesData:
     """Fetch updates and return FastMCP v4 structured data.
 
@@ -246,6 +253,7 @@ def get_git_updates_data(
         config_path=config_path,
         changes_only=changes_only,
         output_format="json",
+        skip_unchanged=skip_unchanged,
     )
     try:
         data: GitUpdatesData = json.loads(report)
